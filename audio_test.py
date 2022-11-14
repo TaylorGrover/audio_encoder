@@ -11,4 +11,8 @@ def get_all_files():
         files.append(path)
     return files
 
-files = get_all_files()
+def get_random_file():
+    return np.random.choice(get_all_files())
+
+rand_file = get_random_file()
+X, sr = librosa.load(rand_file)
