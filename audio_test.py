@@ -1,3 +1,7 @@
+"""
+Read a random .opus file and output a wav file of the audio to verify the 
+correctness of librosa
+"""
 import librosa
 import os
 import pathlib
