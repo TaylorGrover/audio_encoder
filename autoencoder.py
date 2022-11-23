@@ -3,6 +3,7 @@
 
 import concurrent
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from itertools import repeat
 import librosa
 import os
 import pathlib
@@ -31,32 +32,28 @@ def convert_audio(filepaths):
             os.system(f"ffmpeg -i {path} -c:a libvorbis {newpath} -hide_banner")
 
 
-def get_chunk(paths, sr=22050):
-    audio = []
-    for path in paths:
-        X, sr = librosa.load(path, sr=sr)
-        audio.append(X)
-    return audio
+def get_single_file(path, sr=22050):
+    X, sr = librosa.load(path, sr=sr)
+    return X
 
 
-def get_audio(filepaths, num_vectors=100):
+def get_audio(filepaths, num_vectors=100, sr=22050):
     """
     Currently really slow: approximately 34 files read per second, but there are
     over 100,000 files
     """
     audio = []
+    np.random.shuffle(filepaths)
     start = time.time()
-    '''with ThreadPoolExecutor(max_workers=4) as exe:
-        audio = exe.map(get_single_file, filepaths)'''
-    for i, path in enumerate(filepaths):
-        if i >= num_vectors:
-            break
-        X, sr = librosa.load(path)
-        audio.append(X)
+    with ProcessPoolExecutor(max_workers=3) as exe:
+        completed = exe.map(get_single_file, filepaths[:num_vectors], repeat(sr), chunksize=40)
+        for item in completed:
+            if item.shape[0] == sr:
+                audio.append(item)
     print(time.time() - start)
-    return np.array(audio)
+    return np.array(audio, dtype=np.float16)
 
 if __name__ == "__main__":
     filepaths = get_all_files("ogg")
     #convert_audio(filepaths)
-    audio = get_audio(filepaths, num_vectors=500)
+    audio = get_audio(filepaths, num_vectors=1500)
