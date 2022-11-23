@@ -28,7 +28,7 @@ def convert_audio(filepaths):
         orig = str(path)
         newpath = orig.replace(".opus", ".ogg")
         if not os.path.isfile(newpath):
-            os.system(f"ffmpeg -i {path} -c:a libvorbis {newpath}")
+            os.system(f"ffmpeg -i {path} -c:a libvorbis {newpath} -hide_banner")
 
 
 def get_chunk(paths, sr=22050):
@@ -53,8 +53,6 @@ def get_audio(filepaths, num_vectors=100):
             break
         X, sr = librosa.load(path)
         audio.append(X)
-    #X, sr = librosa.load(path, sr=3675)
-    #audio.append(X)
     print(time.time() - start)
     return np.array(audio)
 
