@@ -71,3 +71,4 @@ if __name__ == "__main__":
         ax=ax
     )
     fig.colorbar(img, ax=ax, format=f'%0.2f')
+    print("asdf")
