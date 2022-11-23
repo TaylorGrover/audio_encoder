@@ -2,10 +2,11 @@
 """
 
 import concurrent
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import librosa
 import os
 import pathlib
+from queue import Queue
 import numpy as np
 import soundfile as sf
 import time
@@ -20,7 +21,8 @@ def get_all_files(extension):
 def convert_audio(filepaths):
     """
     Convert opus to ogg for better support from librosa. 
-    Very time-consuming (one-time use)
+    Very time-consuming (one-time use), but can be stopped using CTRL-z. 
+    Restarting the process starts from where it left off
     """
     for path in filepaths:
         orig = str(path)
@@ -29,30 +31,34 @@ def convert_audio(filepaths):
             os.system(f"ffmpeg -i {path} -c:a libvorbis {newpath}")
 
 
-def get_single_file(path, sr):
-    X, sr = librosa.load(path, sr=sr)
-    return X
+def get_chunk(paths, sr=22050):
+    audio = []
+    for path in paths:
+        X, sr = librosa.load(path, sr=sr)
+        audio.append(X)
+    return audio
 
 
 def get_audio(filepaths, num_vectors=100):
+    """
+    Currently really slow: approximately 34 files read per second, but there are
+    over 100,000 files
+    """
     audio = []
     start = time.time()
-    sr = 3675
-    with ThreadPoolExecutor() as executor:
-        results = []
-        for i, path in enumerate(filepaths):
-            if i >= num_vectors:
-                break
-            results.append(executor.submit(get_single_file, path, sr))
-        #results = [executor.submit(get_single_file, path, sr) for path in filepaths]
-        for result in concurrent.futures.as_completed(results):
-            audio.append(result.result())
+    '''with ThreadPoolExecutor(max_workers=4) as exe:
+        audio = exe.map(get_single_file, filepaths)'''
+    for i, path in enumerate(filepaths):
+        if i >= num_vectors:
+            break
+        X, sr = librosa.load(path)
+        audio.append(X)
     #X, sr = librosa.load(path, sr=3675)
     #audio.append(X)
     print(time.time() - start)
-    return np.array(audio), result
+    return np.array(audio)
 
 if __name__ == "__main__":
     filepaths = get_all_files("ogg")
     #convert_audio(filepaths)
-    audio, result = get_audio(filepaths, num_vectors=500)
+    audio = get_audio(filepaths, num_vectors=500)
