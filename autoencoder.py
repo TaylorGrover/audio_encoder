@@ -5,12 +5,16 @@ import concurrent
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import repeat
 import librosa
+import librosa.display
 import os
 import pathlib
 from queue import Queue
+import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
 import time
+
+plt.ion()
 
 def get_all_files(extension):
     filepaths = []
@@ -54,6 +58,17 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
     return np.array(audio, dtype=np.float16)
 
 if __name__ == "__main__":
+    sr = 22050
     filepaths = get_all_files("ogg")
     #convert_audio(filepaths)
     audio = get_audio(filepaths, num_vectors=1500)
+    stft = librosa.stft(audio)
+    S_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    img = librosa.display.specshow(S_db[10], 
+        x_axis="time", 
+        y_axis="log", 
+        ax=ax
+    )
+    fig.colorbar(img, ax=ax, format=f'%0.2f')
+    print("asdf")
