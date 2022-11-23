@@ -3,6 +3,7 @@
 
 import concurrent
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from itertools import repeat
 import librosa
 import os
 import pathlib
@@ -42,9 +43,10 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
     over 100,000 files
     """
     audio = []
+    np.random.shuffle(filepaths)
     start = time.time()
     with ProcessPoolExecutor(max_workers=3) as exe:
-        completed = exe.map(get_single_file, filepaths, chunksize=40, initargs=(sr,))
+        completed = exe.map(get_single_file, filepaths[:num_vectors], repeat(sr), chunksize=40)
         for item in completed:
             if item.shape[0] == sr:
                 audio.append(item)
