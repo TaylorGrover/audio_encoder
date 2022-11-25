@@ -1,1 +1,3 @@
 mswc_microset/
+data/
+*.npy
