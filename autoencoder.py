@@ -20,11 +20,18 @@ import soundfile as sf
 import time
 import zipfile
 
-plt.ion()
+
+
+plt.ion() # Matplotlib interactive mode for viewing plots
+
+np.random.seed(int(time.time())) # Got same audio every single time not sure why. Tryna increase randomness
+
+EPOCHS = 5
+CHART_DIR = "training_charts"
 
 def get_all_files(extension):
     filepaths = []
-    for path in pathlib.Path(".").rglob("data/*/0_*.{}".format(extension)):
+    for path in pathlib.Path(".").rglob("data/*/*.{}".format(extension)):
         filepaths.append(path)
     return filepaths
 
@@ -33,7 +40,7 @@ def convert_audio(filepaths):
     """
     Convert opus to ogg for better support from librosa. 
     Very time-consuming (one-time use), but can be stopped using CTRL-z. 
-    Restarting the process starts from where it left off
+    Restarting the process starts from where it left off. 
     """
     for path in filepaths:
         orig = str(path)
@@ -57,6 +64,8 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
     audio = []
     np.random.shuffle(filepaths)
     start = time.time()
+    random_indices = [i for i in range(num_vectors)]
+    np.random.shuffle(random_indices)
     '''with ProcessPoolExecutor(max_workers=3) as exe:
         completed = exe.map(get_single_file, filepaths[:num_vectors], repeat(sr), chunksize=40)
         for item in completed:
@@ -67,8 +76,10 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
             with zip_ref.open(audio_fname) as unzipped:
                 audio = np.load(unzipped)
                 print(time.time() - start)
-                return audio
-    for path in filepaths:
+                return audio[random_indices]
+    for i, path in enumerate(filepaths):
+        if i >= num_vectors:
+            break
         X, sample_rate = librosa.load(path, sr=sr)
         if X.shape[0] != sample_rate:
             X = librosa.util.fix_length(X, size=sr)
@@ -77,7 +88,7 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
     with zipfile.ZipFile(zipped_fname, "w") as zip_ref:
         np.save(audio_fname.replace(".npy", ""), audio)
         zip_ref.write(audio_fname)
-    return np.array(audio, dtype=np.float32)
+    return np.array(audio, dtype=np.float32)[random_indices]
 
 
 def show_rand_gram(melspectrograms):
@@ -117,13 +128,25 @@ def get_model(input_size, latent_units=50):
     """
     model = Sequential()
     model.add(layers.Dense(input_size, input_shape=(input_size,), activation="relu"))
-    model.add(layers.BatchNormalization(-1))
-    model.add(layers.Dense(700, activation="relu"))
-    model.add(layers.Dense(latent_units, activation="relu"))
-    model.add(layers.Dense(700, activation="relu"))
-    model.add(layers.Dense(input_size, activation="tanh"))
+    #model.add(layers.BatchNormalization(-1))
+    model.add(layers.Dense(1100, activation="tanh"))
+    model.add(layers.Dense(latent_units, activation="tanh"))
+    model.add(layers.Dense(1100, activation="tanh"))
+    model.add(layers.Dense(input_size, activation="linear"))
     model.compile(optimizer="adam", metrics=["accuracy"], loss="MSE")
     return model
+
+
+def plot_history(name, history, metric):
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(history.history[metric])
+    ax.plot(history.history["val_{}".format(metric)])
+    ax.set_title(name)
+    ax.set_ylabel(metric)
+    ax.set_xlabel("epoch")
+    ax.legend(["train", "val"], loc="upper left")
+    fig.savefig(os.path.join(CHART_DIR, name + ".png"))
+    return fig, ax
 
 
 def conv_data(audio, sr):
@@ -144,14 +167,15 @@ def method_convolution(audio, sr=22050):
     X_train, X_test, maximum = conv_data(audio, sr)
     ### Get model
     model = get_conv_model(X_train.shape[1:], latent_units=200)
-    model.fit(X_train, X_train, epochs=5, validation_split=0.2, batch_size=48, shuffle=True)
+    model.fit(X_train, X_train, epochs=EPOCHS, validation_split=0.2, batch_size=48, shuffle=True)
     return model, X_train, X_test
 
 
-def method_dense(audio, sr=22050):
-    model = get_model(audio.shape[1], 100)
+def method_dense(audio, sr=22050, latent=100):
+    model = get_model(audio.shape[1], latent_units=latent)
     X_train, X_test = train_test_split(audio, test_size=0.3)
-    model.fit(X_train, X_train, epochs=5, validation_split=0.2, batch_size=48, shuffle=True)
+    history = model.fit(X_train, X_train, epochs=EPOCHS, validation_split=0.2, batch_size=48, shuffle=True)
+    fig, ax = plot_history(f"audio_{sr}", history, "accuracy")
     print(model.evaluate(X_test, X_test))
     return model, X_train, X_test
 
@@ -163,7 +187,10 @@ if __name__ == "__main__":
     audio = get_audio(filepaths, num_vectors=3000, sr=sr)
 
     #model, X_train, X_test = method_convolution(sr, audio)
-    model = method_dense(audio, sr)
+    model, X_train, X_test = method_dense(audio, sr, latent=400)
+    pred = model.predict(X_test)
+    sf.write("orig.wav", audio[0], sr)
+    sf.write("pred.wav", pred[0] * 30, sr) # Amplitude scaling necessary
 
     #stft = librosa.stft(audio)
     #S_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
