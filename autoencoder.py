@@ -15,6 +15,7 @@ from queue import Queue
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 import soundfile as sf
 import time
 import zipfile
@@ -45,12 +46,14 @@ def get_single_file(path, sr=22050):
     X, sr = librosa.load(path, sr=sr)
     return X
 
+
 def get_audio(filepaths, num_vectors=100, sr=22050):
     """
     Currently really slow: approximately 34 files read per second, but there are
     over 100,000 files
     """
-    zipped_fname = "raw_audio.zip"
+    zipped_fname = f"raw_audio_{sr}.zip"
+    audio_fname = f"raw_audio_{sr}.npy"
     audio = []
     np.random.shuffle(filepaths)
     start = time.time()
@@ -61,7 +64,7 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
                 audio.append(item)'''
     if os.path.isfile(zipped_fname):
         with zipfile.ZipFile(zipped_fname, "r") as zip_ref:
-            with zip_ref.open(zipped_fname.replace(".zip", ".npy")) as unzipped:
+            with zip_ref.open(audio_fname) as unzipped:
                 audio = np.load(unzipped)
                 print(time.time() - start)
                 return audio
@@ -71,7 +74,10 @@ def get_audio(filepaths, num_vectors=100, sr=22050):
             X = librosa.util.fix_length(X, size=sr)
         audio.append(X)
     print(time.time() - start)
-    return np.array(audio, dtype=np.float16)
+    with zipfile.ZipFile(zipped_fname, "w") as zip_ref:
+        np.save(audio_fname.replace(".npy", ""), audio)
+        zip_ref.write(audio_fname)
+    return np.array(audio, dtype=np.float32)
 
 
 def show_rand_gram(melspectrograms):
@@ -84,37 +90,37 @@ def show_rand_gram(melspectrograms):
 
 
 def get_conv_model(input_shape, latent_units = 50):
-    Input = tf.keras.layers.Input(shape=input_shape)
-    encoder = Sequential()
-    encoder.add(layers.Conv2D(64, (10, 10), input_shape=input_shape, activation="relu"))
-    encoder.add(layers.MaxPool2D((2, 2)))
-    encoder.add(layers.BatchNormalization(-1))
-    encoder.add(layers.Conv2D(34, (5, 5), activation="relu"))
-    encoder.add(layers.MaxPool2D((2, 2)))
-    encoder.add(layers.BatchNormalization(-1))
-    encoder.add(layers.Flatten())
-    encoder.add(layers.Dense(latent_units, activation="relu"))
+    Input = tf.keras.Input(shape=input_shape)
+    #encoder = Sequential()
+    x = layers.Conv2D(32, (5, 5), input_shape=input_shape, activation="relu", padding="same")(Input)
+    x = layers.MaxPool2D((2, 2))(x)
+    x = layers.BatchNormalization(-1)(x)
+    x = layers.Conv2D(32, (5, 5), input_shape=input_shape, activation="relu", padding="same")(x)
+    x = layers.MaxPool2D((2, 2))(x)
+    #print(encoder.summary())
+    #latent = encoder(Input)
     
-    decoder = Sequential()
-    decoder.add(layers.Dense(latent_units, input_shape=(latent_units,), activation="relu"))
-    decoder.add(layers.Dense(latent_units * 2, activation="relu"))
-    decoder.add(layers.Dense(np.prod(input_shape), activation="relu"))
-    decoder.add(layers.Reshape(input_shape))
+    #decoder = Sequential()
+    x = layers.Conv2DTranspose(32, (3, 3), strides=2, activation="relu", padding="same")(x)
+    x = layers.Conv2DTranspose(32, (3, 3), strides=2, activation="relu", padding="same")(x)
+    x = layers.Conv2D(1, (3, 3), activation="relu", padding="same")(x)
+    #print(decoder.summary())
 
-    latent = encoder(Input)
-    output = decoder(latent)
-    model = Model(inputs=Input, outputs=output)
+    model = Model(inputs=Input, outputs=x)
     model.compile(optimizer="adam", metrics=["accuracy"], loss="MSE")
     return model
 
 
 def get_model(input_size, latent_units=50):
+    """
+    This is an attempt to use a model that takes the raw amplitudes
+    """
     model = Sequential()
     model.add(layers.Dense(input_size, input_shape=(input_size,), activation="relu"))
     model.add(layers.BatchNormalization(-1))
-    model.add(layers.Dense(500, activation="relu"))
-    model.add(layers.Dense(latent_units, activation="sigmoid"))
-    model.add(layers.Dense(500, activation="relu"))
+    model.add(layers.Dense(700, activation="relu"))
+    model.add(layers.Dense(latent_units, activation="relu"))
+    model.add(layers.Dense(700, activation="relu"))
     model.add(layers.Dense(input_size, activation="tanh"))
     model.compile(optimizer="adam", metrics=["accuracy"], loss="MSE")
     return model
@@ -124,26 +130,40 @@ def conv_data(audio, sr):
     ### Long operation: convert raw audio to melspectrogram
     start = time.time()
     mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=128)
+    maximum = np.max(mel)
     print(time.time() - start)
 
     ### Reshape mel spectrogram so each [row][col] is a singleton array (for keras)
-    mel_reshaped = mel.reshape(*mel.shape, 1)
+    mel_reshaped = mel.reshape(*mel.shape, 1) / maximum
+
     X_train, X_test = train_test_split(mel_reshaped, test_size=0.3)
-    return X_train, X_test
+    return X_train, X_test, maximum
+
+
+def method_convolution(audio, sr=22050):
+    X_train, X_test, maximum = conv_data(audio, sr)
+    ### Get model
+    model = get_conv_model(X_train.shape[1:], latent_units=200)
+    model.fit(X_train, X_train, epochs=5, validation_split=0.2, batch_size=48, shuffle=True)
+    return model, X_train, X_test
+
+
+def method_dense(audio, sr=22050):
+    model = get_model(audio.shape[1], 100)
+    X_train, X_test = train_test_split(audio, test_size=0.3)
+    model.fit(X_train, X_train, epochs=5, validation_split=0.2, batch_size=48, shuffle=True)
+    print(model.evaluate(X_test, X_test))
+    return model, X_train, X_test
 
 
 if __name__ == "__main__":
-    sr = 22050
+    sr = 10000 
     filepaths = get_all_files("wav")
     #convert_audio(filepaths)
     audio = get_audio(filepaths, num_vectors=3000, sr=sr)
 
-    ### Get data
-    X_train, X_test = conv_data(audio, sr)
-
-    ### Get model
-    model = get_conv_model(X_train.shape[1:], latent_units=200)
-    model.fit(X_train, X_train, epochs=5, validation_split=0.2, batch_size=48, shuffle=True)
+    #model, X_train, X_test = method_convolution(sr, audio)
+    model = method_dense(audio, sr)
 
     #stft = librosa.stft(audio)
     #S_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
