@@ -7,6 +7,7 @@ from itertools import repeat
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.optimizers import SGD, RMSprop
 import librosa
 import librosa.display
 import os
@@ -26,7 +27,7 @@ plt.ion() # Matplotlib interactive mode for viewing plots
 
 np.random.seed(int(time.time())) # Got same audio every single time not sure why. Tryna increase randomness
 
-EPOCHS = 5
+EPOCHS = 20
 CHART_DIR = "training_charts"
 
 def get_all_files(extension):
@@ -133,7 +134,7 @@ def get_model(input_size, latent_units=50):
     model.add(layers.Dense(latent_units, activation="tanh"))
     model.add(layers.Dense(1100, activation="relu"))
     model.add(layers.Dense(input_size, activation="linear"))
-    model.compile(optimizer="adam", metrics=["accuracy"], loss="MSE")
+    model.compile(optimizer="adam", metrics=["accuracy"], loss="cosine_similarity")
     return model
 
 
@@ -174,23 +175,23 @@ def method_convolution(audio, sr=22050):
 def method_dense(audio, sr=22050, latent=100):
     model = get_model(audio.shape[1], latent_units=latent)
     X_train, X_test = train_test_split(audio, test_size=0.3)
-    history = model.fit(X_train, X_train, epochs=EPOCHS, validation_split=0.2, batch_size=48, shuffle=True)
-    fig, ax = plot_history(f"audio_{sr}", history, "accuracy")
+    history = model.fit(X_train, X_train, epochs=EPOCHS, validation_split=0.1, batch_size=48, shuffle=True)
+    fig, ax = plot_history(f"audio_{sr}", history, "loss")
     print(model.evaluate(X_test, X_test))
     return model, X_train, X_test
 
 
 if __name__ == "__main__":
-    sr = 10000 
+    sr = 5000 
     filepaths = get_all_files("wav")
     #convert_audio(filepaths)
     audio = get_audio(filepaths, num_vectors=3000, sr=sr)
 
     #model, X_train, X_test = method_convolution(sr, audio)
-    model, X_train, X_test = method_dense(audio, sr, latent=500)
+    model, X_train, X_test = method_dense(audio, sr, latent=900)
     pred = model.predict(X_test)
-    sf.write("orig.wav", audio[0], sr)
-    sf.write("pred.wav", pred[0] * 30, sr) # Amplitude scaling necessary
+    sf.write("orig.wav", audio[0] * 200, sr)
+    sf.write("pred.wav", pred[0] * 200, sr) # Amplitude scaling necessary
 
     #stft = librosa.stft(audio)
     #S_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
