@@ -131,7 +131,7 @@ def get_model(input_size, latent_units=50):
     #model.add(layers.BatchNormalization(-1))
     model.add(layers.Dense(1100, activation="tanh"))
     model.add(layers.Dense(latent_units, activation="tanh"))
-    model.add(layers.Dense(1100, activation="tanh"))
+    model.add(layers.Dense(1100, activation="relu"))
     model.add(layers.Dense(input_size, activation="linear"))
     model.compile(optimizer="adam", metrics=["accuracy"], loss="MSE")
     return model
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     audio = get_audio(filepaths, num_vectors=3000, sr=sr)
 
     #model, X_train, X_test = method_convolution(sr, audio)
-    model, X_train, X_test = method_dense(audio, sr, latent=400)
+    model, X_train, X_test = method_dense(audio, sr, latent=500)
     pred = model.predict(X_test)
     sf.write("orig.wav", audio[0], sr)
     sf.write("pred.wav", pred[0] * 30, sr) # Amplitude scaling necessary
