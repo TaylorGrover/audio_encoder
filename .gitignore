@@ -1,4 +1,5 @@
 mswc_microset/
 data/
+models/
 *.npy
 *.zip
