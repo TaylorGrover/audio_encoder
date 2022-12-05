@@ -195,10 +195,10 @@ def plot_history(name, history, metric):
     return fig, ax
 
 
-def conv_data(audio, sr):
+def conv_data(audio, sr, mels=64):
     ### Long operation: convert raw audio to melspectrogram
     start = time.time()
-    mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
+    mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=mels)
     db = librosa.amplitude_to_db(mel, ref=np.max)
     print(time.time() - start)
 

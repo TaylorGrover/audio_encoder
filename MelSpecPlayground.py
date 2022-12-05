@@ -17,7 +17,7 @@ import sys
 
 import pickle
 
-audio_files = glob('zero.wav')
+audio_files = glob('data/*/0*.wav')
 y, sr = librosa.load(audio_files[0])
 
 
