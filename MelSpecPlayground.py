@@ -25,6 +25,7 @@ S = librosa.feature.melspectrogram(y=y,
                                    sr=sr,
                                    n_mels=64,)
 
+print(S.shape)
 #file = open("op.txt", 'w+')
 
 print(str(S))
