@@ -3,6 +3,7 @@
 
 import concurrent
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import glob
 from itertools import repeat
 from keras_visualizer import visualizer
 import librosa
@@ -56,9 +57,7 @@ def get_all_files(extension, only_zero=True):
         pathglob = f"data/*/0*.{extension}"
     else:
         pathglob = f"data/*/*.{extension}"
-    for path in pathlib.Path(".").rglob(pathglob):
-        filepaths.append(path)
-    return filepaths
+    return glob.glob(pathglob)
 
 
 def get_checkpoint(name):
